@@ -88,7 +88,7 @@ function labon() {
 
   govc host.maintenance.exit ${host} || { echo 'Failed exiting maintenance' ; return 1; }
 
-  # Suspend vCenter first to ensure vCLS doesn't get re-created
+  # Suspect vCenter first to ensure vCLS doesn't get re-created
   govc vm.power -on -wait "/ha-datacenter/vm/vcsa8"
   # Suspect untangle router
   govc vm.power -on -wait "/ha-datacenter/vm/untangle"
@@ -200,21 +200,26 @@ function tkgcli () {
 
 function tason() {
   (
+    set -xeuo pipefail
   # Ensure correct vars are set and error if not
   [ -z "${ESXI_IP:-}" ] && echo '$ESXI_IP must be set' && return 1
   [ -z "${ESXI_USERNAME:-}" ] && echo '$ESXI_USERNAME must be set' && return 1
   [ -z "${ESXI_PASSWORD:-}" ] && echo '$ESXI_PASSWORD must be set' && return 1
+  [ -z "${OM_USERNAME:-}" ] && echo '$OM_USERNAME must be set' && return 1
+  [ -z "${OM_PASSWORD:-}" ] && echo '$OM_PASSWORD must be set' && return 1
+  [ -z "${OM_TARGET:-}" ] && echo '$OM_TARGET must be set' && return 1
   unset GOVC_DATACENTER GOVC_HOST GOVC_DATASTORE GOVC_LIBRARY
   export GOVC_URL=$ESXI_IP
   export GOVC_USERNAME=$ESXI_USERNAME
   export GOVC_PASSWORD=$ESXI_PASSWORD
   export GOVC_INSECURE=true
+  export OM_SKIP_SSL_VALIDATION=true
 
   # Power up opsman
-  govc vm.power -on "/ha-datacenter/vm/tas-direct-ops-manager"
+  # govc vm.power -on "/ha-datacenter/vm/tas-direct-ops-manager"
 
   # Power on Bosh managed VMs
-  local VMS="/ha-datacenter/vm/tas-direct-ops-managerz\n$(govc ls /ha-datacenter/vm/vm-*)"
+  local VMS="/ha-datacenter/vm/tas-direct-ops-manager $(govc ls /ha-datacenter/vm/vm-*)"
 
   local VMS_TO_POWER_ON=""
   for VM in $VMS; do
@@ -225,16 +230,23 @@ function tason() {
   done
   if [ ! -z "${VMS_TO_POWER_ON}" ]; then
     local VMS_TO_POWER_ON_NAMES=$(echo "${VMS_TO_POWER_ON}" | sed  s'/\/ha-datacenter\/vm\///'g)
-    echo -e "\Powering on VMs:\n ${VMS_TO_POWER_ON_NAMES}\n"
-    govc vm.power -s -wait $VMS_TO_POWER_ON
+    echo -e "\nPowering on VMs:\n ${VMS_TO_POWER_ON_NAMES}\n"
+    govc vm.power -on -wait $VMS_TO_POWER_ON
   else
     echo -e "\nNo VMs to power on"
   fi
 
-  # local VMS="$(govc ls /ha-datacenter/vm/vm-*)"
-  # govc vm.power -on -wait $VMS
+  echo -e "\nUnlocking opsman"
+  curl -k -X PUT -H "Content-Type: application/json" -d "{\"passphrase\": \"${OM_PASSWORD}${OM_PASSWORD}\"}" https://${OM_TARGET}/api/v0/unlock
+ 
+  eval "`om bosh-env`"
+
+  local CF_DEP=$(bosh deps |grep ^cf- | cut -d ' ' -f 1)
+
+  
 
   echo -e "\nTAS on compelete - check Bosh for state"
+  set +x
   )
 }
 
