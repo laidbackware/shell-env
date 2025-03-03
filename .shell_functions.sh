@@ -222,7 +222,7 @@ function tason() {
   govc vm.power -on -wait -force /ha-datacenter/vm/tas-direct-ops-manager
   local VMS="$(govc ls '/ha-datacenter/vm/vm-*')"
 
-   while IFS= read -r VM; do
+  while IFS= read -r VM; do
     local VM_STATE=$(govc vm.info "${VM}")
     local VM_PATH="$(echo "$VM_STATE" |grep -i "Path:         " | sed s'/  Path:         //')"
     if [[ "${VM_STATE}" != *"poweredOn"* ]]; then
@@ -230,7 +230,6 @@ function tason() {
     else
       echo "VM $VM_PATH already powered on"
     fi
-
   done <<<"$VMS"
 
   echo -e "\nUnlocking opsman"
@@ -259,11 +258,19 @@ function tasoff() {
   export GOVC_INSECURE=true
 
   # Power off opsman
-  govc vm.power -off "/ha-datacenter/vm/tas-direct-ops-manager"
+  govc vm.power -off -force "/ha-datacenter/vm/tas-direct-ops-manager"
 
   # Power on Bosh managed VMs
-  local VMS="$(govc ls /ha-datacenter/vm/vm-*)"
-  govc vm.power -off -wait $VMS
+  local VMS="$(govc ls '/ha-datacenter/vm/vm-*')"
+  while IFS= read -r VM; do
+    local VM_STATE=$(govc vm.info "${VM}")
+    local VM_PATH="$(echo "$VM_STATE" |grep -i "Path:         " | sed s'/  Path:         //')"
+    if [[ "${VM_STATE}" == *"poweredOn"* ]]; then
+      govc vm.power -off -wait -force "$VM_PATH"
+    else
+      echo "VM $VM_PATH already powered off"
+    fi
+  done <<<"$VMS"
 
   echo -e "\nTAS off compelete"
   )
