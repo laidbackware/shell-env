@@ -219,31 +219,27 @@ function tason() {
   # govc vm.power -on "/ha-datacenter/vm/tas-direct-ops-manager"
 
   # Power on Bosh managed VMs
-  local VMS="/ha-datacenter/vm/tas-direct-ops-manager $(govc ls /ha-datacenter/vm/vm-*)"
+  govc vm.power -on -wait -force /ha-datacenter/vm/tas-direct-ops-manager
+  local VMS="$(govc ls '/ha-datacenter/vm/vm-*')"
 
-  local VMS_TO_POWER_ON=""
-  for VM in $VMS; do
+   while IFS= read -r VM; do
     local VM_STATE=$(govc vm.info "${VM}")
+    local VM_PATH="$(echo "$VM_STATE" |grep -i "Path:         " | sed s'/  Path:         //')"
     if [[ "${VM_STATE}" != *"poweredOn"* ]]; then
-      VMS_TO_POWER_ON="${VMS_TO_POWER_ON} $(echo "${VM_STATE}" |grep -i "Path:         " | sed s'/  Path:         //')"
+      govc vm.power -on -wait -force "$VM_PATH"
+    else
+      echo "VM $VM_PATH already powered on"
     fi
-  done
-  if [ ! -z "${VMS_TO_POWER_ON}" ]; then
-    local VMS_TO_POWER_ON_NAMES=$(echo "${VMS_TO_POWER_ON}" | sed  s'/\/ha-datacenter\/vm\///'g)
-    echo -e "\nPowering on VMs:\n ${VMS_TO_POWER_ON_NAMES}\n"
-    govc vm.power -on -wait $VMS_TO_POWER_ON
-  else
-    echo -e "\nNo VMs to power on"
-  fi
+
+  done <<<"$VMS"
 
   echo -e "\nUnlocking opsman"
-  curl -k -X PUT -H "Content-Type: application/json" -d "{\"passphrase\": \"${OM_PASSWORD}${OM_PASSWORD}\"}" https://${OM_TARGET}/api/v0/unlock
+  curl -k -X PUT -H "Content-Type: application/json" --retry-all-errors --retry 20 \
+    -d "{\"passphrase\": \"${OM_PASSWORD}${OM_PASSWORD}\"}" https://${OM_TARGET}/api/v0/unlock
  
   eval "`om bosh-env`"
-
   local CF_DEP=$(bosh deps |grep ^cf- | cut -d ' ' -f 1)
-
-  
+  #TODO wait until all VMs are ready
 
   echo -e "\nTAS on compelete - check Bosh for state"
   set +x
