@@ -46,3 +46,6 @@ alias tkgm-on='ansible-playbook /home/matt/workspace/projects/vmware-lab-builder
 alias tkgm-off='ansible-playbook /home/matt/workspace/projects/vmware-lab-builder/destroy.yml --extra-vars "@./var-examples/tanzu/multi-cloud/opinionated-1host.yml"'
 
 alias au='sudo apt update && sudo apt upgrade'
+
+alias pve='python -m venv .venv'
+alias pva='. .venv/bin/activate'
